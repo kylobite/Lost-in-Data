@@ -5,17 +5,16 @@ from pyglet.gl import *
 from pyglet.window import key
 from random import randint
 
-__game__    = "File Maze"
-__author__  = "B.A.D Pythons(ssss)"
-#if __name__ is "__main__":
+__game__    = "Lost in Data"
+__author__  = "kylobite"
 
-block_size = 20
-w_width  = block_size * 4 * 10
-w_height = block_size * 3 * 10
-window   = pyglet.window.Window(w_width,w_height)
-keys     = key.KeyStateHandler()
-filepath = sys.argv[1]
-fps      = pyglet.clock.ClockDisplay()
+block_size  = 20
+w_width     = block_size * 4 * 10
+w_height    = block_size * 3 * 10
+window      = pyglet.window.Window(w_width,w_height)
+keys        = key.KeyStateHandler()
+filepath    = sys.argv[1]
+fps         = pyglet.clock.ClockDisplay()
 
 window.push_handlers(keys)
 
