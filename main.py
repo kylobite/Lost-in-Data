@@ -8,14 +8,21 @@ from random import randint
 __game__    = "Lost in Data"
 __author__  = "kylobite"
 
+# only use one file, shift seed each rotation
+
 block_size  = 20
 w_width     = block_size * 4 * 10
 w_height    = block_size * 3 * 10
 window      = pyglet.window.Window(w_width,w_height)
 keys        = key.KeyStateHandler()
-filepath    = sys.argv[1]
 fps         = pyglet.clock.ClockDisplay()
+gen_seed    = randint(0,255)#filepath=sys.argv[1]
+p_color     = "ff0000"
+p_health    = 1
+p_points    = 0
 
+if len(sys.argv) > 2:
+    p_color = sys.argv[2]
 window.push_handlers(keys)
 
 nums = [str(n) for n in range(0,10)]
@@ -70,37 +77,48 @@ def hex2rgb(hex):
     rgb.append(int(hex[4:],16))
     return rgb
 
-px, py = block_size,block_size#block_size / 2 + 3,block_size / 2 + 3
-def draw_block(pos=[0,0],rgb=[0,0,0],size=block_size):
+px, py  = block_size,block_size
+pc      = []
+def draw_block(pos=[0,0],rgb=[0,0,0],size=block_size,cache=False):
     x, y    = pos
     r, g, b = rgb
-
-    x = x * size
-    y = y * size
+    x       = x * size
+    y       = y * size
+    coords  = (0 + x, 0 + y,
+                block_size + x, 0 + y,
+                block_size + x, block_size + y,
+                0 + x, block_size + y)
 
     pyglet.graphics.draw_indexed(4, pyglet.gl.GL_TRIANGLES,
         [0, 1, 2, 0, 2, 3],
-        ('v2i', (0 + x, 0 + y,
-                 block_size + x, 0 + y,
-                 block_size + x, block_size + y,
-                 0 + x, block_size + y)),
+        ('v2i', coords),
         ('c3B', (r, g, b,
                  r, g, b,
                  r, g, b,
                  r, g, b))
     )
 
+    if cache: return coords
+
+compare = lambda a,b: len(a)==len(b) and len(a)==sum([1 for i,j in zip(a,b) if i==j])
+
 def collide(fx,fy,i=-1):
     global total
     global cx,cy
+    global px,py
+    global pc,mc
+    global p_health
     if i < 0:
-        global px,py
         cx = px
         cy = py
     else:
         cx = mx[i]
         cy = my[i]
-        # if collide(cx,cy,0)
+
+    for c in mc:
+        if compare(pc,c):
+            p_health = p_health - 1
+
     grid = [[x*block_size,y*block_size] for x,y in total]
     if not [fx,fy] in grid:
         return [fx, fy]
@@ -137,12 +155,12 @@ def build_wall(grid):
     for y in range(0,30):
         for x in range(0,40):
             if y is 0 or y is h-1:
-                color = "ffffff"#temp_random_color()
+                color = "ffffff"
                 draw_block([x,y], hex2rgb(color))
                 border.append([x,y])
             else:
                 if x is 0 or x is w-1:
-                    color = "ffffff"#temp_random_color()
+                    color = "ffffff"
                     draw_block([x,y], hex2rgb(color))
                     border.append([x,y])
     return border
@@ -186,30 +204,26 @@ def grow(spots):
                     walls.append([x,y+(m*j)])
     return walls
 
-def mac_color():
-    global maccolor
-    mac_add = ''.join(['{:02x}'.format((uuid.getnode() >> i) & 0xff) for i in range(0,8*6,8)][::-1])
-    maccolor = mac_add[6:12]
-    return maccolor
-
 def player():
-    global px,py
-    draw_block([px, py],hex2rgb(mac_color()),1)
+    global px,py, pc
+    pc = draw_block([px, py],hex2rgb(p_color),1,True)
 
-pyglet.gl.glClearColor(*back("000000"))#"7700ff"))
+pyglet.gl.glClearColor(*back("000000"))
+
 grid           = generate_grid()
 border         = build_wall(grid)
-seed           = file_get_contents(filepath)
-seeds, one_ups = useed(hashlib.sha512(filepath).hexdigest())
+seed           = str(gen_seed) #file_get_contents(gen_seed)
+seeds, one_ups = useed(hashlib.sha512(seed).hexdigest())
 bases          = plant(spots(),seeds)
 walls          = grow(bases)
 total          = sum([bases, walls, border],[])
 time           = 0
+not_moved      = 0
 
 def mob_amount(filesize):
     return len(str(filesize))
 
-mx, my = [],[]
+mx,my,mc = [],[],[]
 def mob_gen(amount):
     mobs = []
     i = 0
@@ -222,23 +236,79 @@ def mob_gen(amount):
     return mobs
 
 def mob(x,y,i):
-    global mx,my
+    global mx,my,mc
     x       = mx[i]
     y       = my[i]
-    rgb     = hex2rgb(mac_color())
+    rgb     = hex2rgb(p_color)
     r,g,b   = rgb
     r       = 255 - r
     g       = 255 - g
     b       = 255 - b
-    draw_block([x, y],(r,g,b),1)
+    mc.append(draw_block([x, y],(r,g,b),1,True))
 
-mob_count = mob_amount(file_get_size(filepath))
-mob_list  = mob_gen(mob_count)
-p_health  = 1
+# mob_count = mob_amount(file_get_size(filepath))
+mob_list  = mob_gen(randint(1,10) * 2)
+
+def rebuild(new_seed):
+    global grid, border, seed, seeds, one_ups, bases, walls, total, time, mob_list
+    grid           = generate_grid()
+    border         = build_wall(grid)
+    seed           = str(new_seed) #file_get_contents(filepath)
+    seeds, one_ups = useed(hashlib.sha512(seed).hexdigest())
+    bases          = plant(spots(),seeds)
+    walls          = grow(bases)
+    total          = sum([bases, walls, border],[])
+    time           = 0
+    not_moved      = 0
+    mob_list       = mob_gen(randint(1,10) * 2)
 
 def tiles(concat):
     global total
     return total
+
+def game_over(points):
+    plural = ""
+    if points != 1: plural = "s"
+    print "You died with: %s point%s" % (points, plural)
+
+def update(dt):
+    global px,py,time,p_health,p_points,not_moved
+    b     = block_size
+    limit = 120
+    time  = time + 1
+    if not_moved >= limit/2 - 20:
+        p_health = p_health - 1
+
+    if time == limit:
+        p_points = p_points + 1
+        rebuild(randint(0,255))
+
+    if time % 2 is 0:
+        cx,cy = px, py
+        if keys[key.W]: px, py = collide(px + 0, py + b)
+        if keys[key.S]: px, py = collide(px + 0, py - b)
+        if keys[key.D]: px, py = collide(px + b, py + 0)
+        if keys[key.A]: px, py = collide(px - b, py + 0)
+        if cx == px and cy == py:
+            not_moved = not_moved + 1
+
+    if keys[key.ESCAPE]:
+        game_over(p_points)
+        sys.exit()
+
+    i = 0
+    if time % 10 is 0:
+        for m in mob_list:
+            dirs = [-1,0,1]
+            b = block_size
+            f = [randint(0,2),randint(0,2)]
+            g = [1,1]
+            if f[1] < 0:
+                g[1] = 2
+            x, y = collide(mx[i]  + (dirs[f[0]]  * b), my[i]  + (dirs[f[1]] * b),i)
+            mx[i] = x
+            my[i] = y
+            i = i + 1
 
 def draw(show=False):
     window.clear()
@@ -253,42 +323,17 @@ def draw(show=False):
         i = i + 1
     if show: fps.draw()
 
-def update(dt):
-    global px,py,time
-    b = block_size
-    time = time + 1
-    if time % 4 is 0: 
-        if keys[key.W]: px, py = collide(px + 0, py + b)
-        if keys[key.S]: px, py = collide(px + 0, py - b)
-        if keys[key.D]: px, py = collide(px + b, py + 0)
-        if keys[key.A]: px, py = collide(px - b, py + 0)
-
-        i = 0
-        for m in mob_list:
-            dirs = [-1,0,1]
-            b = block_size
-            f = [randint(0,2),randint(0,2)]
-            g = [1,1]
-            if f[1] < 0:
-                g[1] = 2
-            x, y = collide(mx[i]  + (dirs[f[0]]  * b), my[i]  + (dirs[f[1]] * b),i)
-            mx[i] = x
-            my[i] = y
-            i = i + 1
-    if keys[key.ESCAPE]: sys.exit()
-
 pyglet.clock.schedule_interval(update, 1/60.0)
 
 while not window.has_exit and p_health > 0:
     dt = pyglet.clock.tick()
-    # time = time + 1
     update(dt)
     window.dispatch_events()
     window.clear()
     draw()
     window.flip()
-
-# pyglet.app.run()
+else:
+    game_over(p_points)
 
 
 
